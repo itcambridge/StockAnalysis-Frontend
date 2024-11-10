@@ -1,0 +1,45 @@
+name: Deploy Frontend to Linode
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          push: true
+          tags: itcambridge/stockbuddy:latest
+
+      - name: Deploy to Linode
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.LINODE_HOST }}
+          username: ${{ secrets.LINODE_USERNAME }}
+          key: ${{ secrets.LINODE_SSH_KEY }}
+          script: |
+            docker pull itcambridge/stockbuddy:latest
+            docker stop stock-analysis-frontend || true
+            docker rm stock-analysis-frontend || true
+            docker run -d \
+              --name stock-analysis-frontend \
+              -p 80:3001 \
+              -e REACT_APP_FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }} \
+              -e REACT_APP_FIREBASE_AUTH_DOMAIN=${{ secrets.FIREBASE_AUTH_DOMAIN }} \
+              -e REACT_APP_FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }} \
+              itcambridge/stockbuddy:latest
